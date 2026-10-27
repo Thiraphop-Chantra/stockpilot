@@ -347,7 +347,7 @@ def _lifecycle(cfg: SynthConfig, pattern: np.ndarray, rng):
     discontinued = np.full(n, None, dtype=object)
     ramp = np.full(n, np.nan)
     decline = np.full(n, np.nan)
-    span = (cfg.start - FIRST_MASTER_DATE).days
+    span = (cfg.start - timedelta(days=cfg.warmup_days) - FIRST_MASTER_DATE).days  # before data
     for i in range(n):
         if lifecycle[i] == "new":
             offset = int(rng.integers(60, days - NEW_SKU_MIN_HISTORY_DAYS + 1))
