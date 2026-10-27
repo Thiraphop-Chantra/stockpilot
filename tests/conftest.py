@@ -37,3 +37,10 @@ def small_rates(small_cfg, small_cal, small_master, small_promos):
 @pytest.fixture(scope="session")
 def small_lines(small_cfg, small_cal, small_master, small_rates):
     return generate_lines(small_cfg, small_cal, small_master, small_rates)
+
+
+@pytest.fixture(scope="session")
+def small_inventory(small_cfg, small_cal, small_master, small_lines, small_promos):
+    from stockpilot.synth.inventory import simulate
+
+    return simulate(small_cfg, small_cal, small_master, small_lines, small_promos.planning)
