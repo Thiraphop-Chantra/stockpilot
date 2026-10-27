@@ -44,3 +44,34 @@ def small_inventory(small_cfg, small_cal, small_master, small_lines, small_promo
     from stockpilot.synth.inventory import simulate
 
     return simulate(small_cfg, small_cal, small_master, small_lines, small_promos.planning)
+
+
+@pytest.fixture(scope="session")
+def small_sales(small_cfg, small_cal, small_master, small_lines, small_inventory, small_promos):
+    from stockpilot.synth.sales import build_sales_clean
+
+    return build_sales_clean(
+        small_cfg, small_cal, small_master, small_lines, small_inventory, small_promos
+    )
+
+
+@pytest.fixture(scope="session")
+def small_injected(small_cfg, small_cal, small_master, small_sales):
+    from stockpilot.synth.issues import inject
+
+    return inject(small_cfg, small_cal, small_master, small_sales)
+
+
+@pytest.fixture(scope="session")
+def tiny_injected():
+    from stockpilot.synth.inventory import simulate
+    from stockpilot.synth.issues import inject
+    from stockpilot.synth.sales import build_sales_clean
+
+    cfg = SynthConfig.from_preset("tiny")
+    cal = build_calendar(cfg)
+    master = build_master(cfg, cal)
+    promos = build_promotions(cfg, cal, master)
+    lines = generate_lines(cfg, cal, master, build_rates(cfg, cal, master, promos))
+    inv = simulate(cfg, cal, master, lines, promos.planning)
+    return inject(cfg, cal, master, build_sales_clean(cfg, cal, master, lines, inv, promos))
