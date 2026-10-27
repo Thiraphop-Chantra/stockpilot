@@ -3,9 +3,11 @@
 
 UV ?= uv
 RUN := $(UV) run --locked
+DATA_DIR ?= data
+SEED ?= 42
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint format ci clean \
+.PHONY: help install data data-small validate-data test lint format ci clean clean-data \
 	audit forecast optimize simulate mcp dashboard release
 
 define not_implemented
@@ -18,6 +20,17 @@ help: ## List available targets
 
 install: ## Create .venv from uv.lock (runtime + dev tools)
 	$(UV) sync --locked
+
+data: ## Generate the default synthetic dataset into $(DATA_DIR)/ and validate it
+	$(RUN) stockpilot synth --preset default --seed $(SEED) --out $(DATA_DIR)
+	$(RUN) stockpilot validate --data $(DATA_DIR)
+
+data-small: ## Generate the small preset into data-small/ (quick experiments)
+	$(RUN) stockpilot synth --preset small --seed $(SEED) --out data-small
+	$(RUN) stockpilot validate --data data-small
+
+validate-data: ## Re-check an existing dataset against its manifest and targets
+	$(RUN) stockpilot validate --data $(DATA_DIR)
 
 test: ## Run the test suite
 	$(RUN) pytest
@@ -35,6 +48,9 @@ ci: lint test ## What CI runs on every push and pull request
 clean: ## Remove caches and build artefacts (keeps data/)
 	rm -rf .pytest_cache .ruff_cache build dist
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+
+clean-data: ## Remove generated datasets (regenerate with make data)
+	rm -rf $(DATA_DIR) data-small
 
 audit: ## Step 2 - data quality audit
 	$(call not_implemented,2)

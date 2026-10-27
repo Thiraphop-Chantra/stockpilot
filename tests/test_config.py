@@ -40,3 +40,8 @@ def test_config_serialises_to_json():
     assert payload["preset"] == "tiny"
     assert payload["start"] == "2021-01-01"
     assert payload["pattern_mix"]["lumpy"] == 0.20
+
+
+def test_config_round_trips_through_its_dictionary_form():
+    cfg = SynthConfig.from_preset("small", seed=9)
+    assert SynthConfig.from_dict(json.loads(json.dumps(cfg.to_dict()))) == cfg

@@ -74,6 +74,15 @@ class SynthConfig:
     def horizon_end(self) -> date:
         return self.history_end + timedelta(days=self.horizon_days)
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> SynthConfig:
+        """Inverse of :meth:`to_dict` (e.g. to rebuild a run from its manifest)."""
+        fields = dict(payload)
+        fields["start"] = date.fromisoformat(fields["start"])
+        fields["pattern_mix"] = tuple((k, float(v)) for k, v in fields["pattern_mix"].items())
+        fields["issues"] = IssueRates(**fields["issues"])
+        return cls(**fields)
+
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["start"] = self.start.isoformat()
