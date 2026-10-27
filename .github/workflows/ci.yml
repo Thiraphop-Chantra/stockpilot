@@ -72,3 +72,5 @@ jobs:
         run: uv sync --locked
       - name: Generate and validate the default dataset
         run: make data
+      - name: Check that documented numbers match this run
+        run: make docs-check

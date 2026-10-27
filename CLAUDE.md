@@ -50,15 +50,20 @@ a fictional mid-sized Thai distributor. The work is split into 7 steps, one per 
 | Command | What it does |
 |---|---|
 | `make install` | Create `.venv` from `uv.lock` (runtime + dev tools) |
+| `make data` | Generate the default synthetic dataset into `data/` and validate it (`SEED=42`) |
+| `make validate-data` | Re-check `data/` against its manifest and the configured targets |
+| `make docs-stats` | Re-render generated doc blocks from `data/manifest.json` |
+| `make docs-check` | Fail if generated doc blocks differ from `data/manifest.json` (CI runs this) |
 | `make test` | Run pytest (tests build their own small datasets in temp dirs) |
 | `make lint` | `ruff check` + `ruff format --check` |
 | `make format` | Apply ruff formatting and safe fixes |
 | `make ci` | Lint + test, as CI does |
 | `make help` | List every target, including placeholders for later steps |
 
-Steps add their own targets (`make data`, `make audit`, `make forecast`, …); a target that a later
-step will implement prints "not implemented yet" and exits 1. Use `uv run --locked <cmd>` for
-anything else. After changing dependencies run `uv lock` and commit `uv.lock`.
+Later steps add their own targets (`make audit`, `make forecast`, …); until then such a target
+prints "not implemented yet" and exits 1. Use `uv run --locked <cmd>` for anything else. After
+changing dependencies run `uv lock` and commit `uv.lock`. After changing the generator, run
+`make data && make docs-stats` and commit the updated doc blocks.
 
 ## Data contract
 

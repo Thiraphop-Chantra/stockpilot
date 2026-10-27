@@ -33,6 +33,17 @@ def build_parser() -> argparse.ArgumentParser:
     validate = commands.add_parser("validate", help="check a generated dataset")
     validate.add_argument("--data", default="data", help="dataset directory (default: data)")
     validate.set_defaults(handler=_validate)
+
+    docs = commands.add_parser("docs-stats", help="render doc blocks from a dataset manifest")
+    docs.add_argument("--data", default="data", help="dataset directory (default: data)")
+    docs.add_argument(
+        "--docs",
+        nargs="+",
+        default=["docs/DATA.md", "README.md"],
+        help="documents with generated blocks (default: docs/DATA.md README.md)",
+    )
+    docs.add_argument("--check", action="store_true", help="fail if a block is out of date")
+    docs.set_defaults(handler=_docs_stats)
     return parser
 
 
@@ -93,3 +104,19 @@ def _validate(args: argparse.Namespace) -> int:
         print(f"pattern agreement: {patterns['agreement']}, fill rate: {service['fill_rate']}")
     print("Dataset is valid (synthetic data)." if report.ok else "Dataset is INVALID.")
     return 0 if report.ok else 1
+
+
+def _docs_stats(args: argparse.Namespace) -> int:
+    import json
+
+    from stockpilot.synth.report import sync_docs
+
+    manifest = json.loads((Path(args.data) / "manifest.json").read_text(encoding="utf-8"))
+    changed = sync_docs(manifest, [Path(d) for d in args.docs], check=args.check)
+    if args.check and changed:
+        for entry in changed:
+            print(f"out of date: {entry}", file=sys.stderr)
+        print("Run `make docs-stats` after `make data` and commit the result.", file=sys.stderr)
+        return 1
+    print("Generated doc blocks are up to date." if not changed else f"Updated: {changed}")
+    return 0

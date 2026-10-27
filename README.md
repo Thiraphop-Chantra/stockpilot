@@ -31,7 +31,7 @@ inventory optimisation      safety stock, reorder points, simulation in THB     
 
 | Step | Theme | Status |
 |---|---|---|
-| 1 | Foundation + synthetic data | in progress |
+| 1 | Foundation + synthetic data | done |
 | 2 | Data quality audit | planned |
 | 3 | Forecasting tournament | planned |
 | 4 | Inventory optimisation & simulation | planned |
@@ -42,6 +42,19 @@ inventory optimisation      safety stock, reorder points, simulation in THB     
 Details and definitions of done: [docs/ROADMAP.md](docs/ROADMAP.md). Live checklist:
 [TASKS.md](TASKS.md).
 
+## The synthetic dataset
+
+<!-- generated:readme-summary:start -->
+The default synthetic dataset (seed 42) covers 2021-01-01 to 2025-12-31: 2,000 SKUs, 600 customers, 60 suppliers and 3 warehouses, with 4,022,207 raw sales rows and 341,666 purchase-order items. Details and limitations: [docs/DATA.md](docs/DATA.md).
+<!-- generated:readme-summary:end -->
+
+The data mimics ERP exports of a Thai distributor — SAP-style material codes, box/piece units,
+Thai public holidays, promotions, product launches and discontinuations, a lost key account,
+supplier delays and stockouts that censor sales — and contains deliberate data-quality problems
+(stripped leading zeros, duplicate rows, unit mismatches, extra-zero typos, Buddhist-era dates,
+Thai/English duplicate customers, missing prices). Every problem and the true, uncensored demand
+are recorded separately as ground truth for scoring later steps.
+
 ## Quickstart
 
 Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/) and GNU make. Everything runs
@@ -49,6 +62,7 @@ offline once dependencies are installed.
 
 ```bash
 make install    # create .venv from uv.lock
+make data       # generate and validate the synthetic dataset in data/
 make test       # run the test suite
 make lint       # ruff lint + format check
 make help       # list all targets
@@ -57,11 +71,14 @@ make help       # list all targets
 ## Repository layout
 
 ```
-src/stockpilot/      Python package (src layout)
-tests/               pytest suite
-docs/ROADMAP.md      the 7 steps and their definitions of done
-CLAUDE.md            working agreement for contributors and AI sessions
-TASKS.md             checklist and session log
+src/stockpilot/          Python package (src layout)
+  patterns.py            ADI/CV² demand-pattern classification
+  synth/                 synthetic data generator
+tests/                   pytest suite
+docs/ROADMAP.md          the 7 steps and their definitions of done
+docs/DATA.md             what the data simulates, statistics, data dictionary, limitations
+CLAUDE.md                working agreement for contributors and AI sessions
+TASKS.md                 checklist and session log
 ```
 
 ## License

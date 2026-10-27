@@ -7,7 +7,8 @@ DATA_DIR ?= data
 SEED ?= 42
 
 .DEFAULT_GOAL := help
-.PHONY: help install data data-small validate-data test lint format ci clean clean-data \
+.PHONY: help install data data-small validate-data docs-stats docs-check test lint format ci \
+	clean clean-data \
 	audit forecast optimize simulate mcp dashboard release
 
 define not_implemented
@@ -31,6 +32,12 @@ data-small: ## Generate the small preset into data-small/ (quick experiments)
 
 validate-data: ## Re-check an existing dataset against its manifest and targets
 	$(RUN) stockpilot validate --data $(DATA_DIR)
+
+docs-stats: ## Re-render generated doc blocks from $(DATA_DIR)/manifest.json
+	$(RUN) stockpilot docs-stats --data $(DATA_DIR)
+
+docs-check: ## Fail if generated doc blocks differ from $(DATA_DIR)/manifest.json
+	$(RUN) stockpilot docs-stats --data $(DATA_DIR) --check
 
 test: ## Run the test suite
 	$(RUN) pytest
