@@ -2,8 +2,9 @@
 
 Customer names join two generic Thai words (each with several common romanisations) and a
 business form typical for the customer type, e.g. "shop + words" in Thai or "words + Shop" in
-English. Brand and supplier names come from a hand-reviewed list of invented stems. Names are
-never taken from real businesses; any resemblance is coincidental.
+English. Brands and suppliers get numbered labels ("Brand 017", "Supplier 031 Co., Ltd.") so
+they can never coincide with a real company. Names are never taken from real businesses; any
+resemblance of a customer name to a real business is coincidental.
 """
 
 from __future__ import annotations
@@ -15,20 +16,6 @@ from importlib.resources import files
 
 import numpy as np
 
-# Invented brand and company stems: every combination was reviewed by hand so that none forms a
-# real word, a known name or anything offensive. Brands and suppliers share stems, as brand
-# owners often carry their manufacturer's name.
-_STEM_HEADS = (
-    "Alv", "Bren", "Cal", "Dor", "Elv", "Fal", "Gav", "Hal", "Jor", "Kel", "Lor", "Mel",
-    "Nor", "Orv", "Pal", "Quen", "Ral", "Sel", "Tal", "Ulv", "Vel", "Wyl", "Yor", "Zev",
-)  # fmt: skip
-_STEM_TAILS = ("ando", "ara", "eno", "ova", "ura", "orin", "ane")
-BRAND_STEMS = tuple(
-    head + tail
-    for head in _STEM_HEADS
-    for tail in _STEM_TAILS
-    if not (tail == "ova" and head.endswith("v"))
-)
 SUPPLIER_FORMS = {
     "TH": ("{name} Industries Co., Ltd.", "{name} Manufacturing Co., Ltd."),
     "CN": ("{name} Industrial Co., Ltd.", "{name} Trading Co., Ltd."),
@@ -102,15 +89,6 @@ def variant_name(rng: np.random.Generator, parts: NameParts, lang: str) -> tuple
         if name != original and (kind == "th_to_en" or name != english_name(parts)):
             return name, kind
     return english_name(parts, (1, 1), joined=True, suffix=1), kind
-
-
-def pick_stems(rng: np.random.Generator, n: int) -> list[str]:
-    """``n`` distinct names built on the stems (numbered once every stem has been used)."""
-    order = rng.permutation(len(BRAND_STEMS))
-    size = len(BRAND_STEMS)
-    return [
-        BRAND_STEMS[order[k % size]] + ("" if k < size else f" {k // size + 1}") for k in range(n)
-    ]
 
 
 def supplier_name(rng: np.random.Generator, base: str, country: str) -> str:

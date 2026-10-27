@@ -11,9 +11,13 @@ from stockpilot.synth.calendar import build_calendar
 from stockpilot.synth.catalog import CATEGORIES
 from stockpilot.synth.config import SynthConfig
 from stockpilot.synth.master import build_master
-from stockpilot.synth.names import BRAND_STEMS
 
 THAI = re.compile("[\\u0e00-\\u0e7f]")
+
+
+def product_type(descriptions: pd.Series) -> pd.Series:
+    """'Brand 017 Green Tea 500ml V2' -> 'Green Tea 500ml'."""
+    return descriptions.str.split(" ", n=2).str[2].str.removesuffix(" V2")
 
 
 @pytest.fixture(scope="module")
@@ -42,16 +46,34 @@ def test_prices_exceed_costs_and_are_rounded_to_satang(master):
 
 def test_list_prices_follow_the_product_type_price_band(master):
     bands = {name: (lo, hi) for cat in CATEGORIES for name, lo, hi, _ in cat.products}
-    product = master.materials["description"].str.split(" ", n=1).str[1]
+    product = product_type(master.materials["description"])
     lo = product.map(lambda name: bands[name][0])
     hi = product.map(lambda name: bands[name][1])
     assert master.materials["list_price_thb"].between(lo, hi).all()
 
 
-def test_brands_come_from_the_curated_stem_list(master):
-    assert set(master.materials["brand"]) <= set(BRAND_STEMS)
-    stems = {name.removeprefix("PT ").split(" ")[0] for name in master.suppliers["supplier_name"]}
-    assert stems <= set(BRAND_STEMS)
+def test_brand_and_supplier_names_are_numbered_labels(master):
+    # Numbered labels can never coincide with a real brand or company.
+    assert master.materials["brand"].str.fullmatch(r"Brand \d{3}").all()
+    labels = master.suppliers["supplier_name"].str.extract(r"(Supplier \d{3})")[0]
+    assert labels.notna().all() and labels.is_unique
+
+
+def test_successors_continue_their_predecessor_product_line(master):
+    m = master.materials.set_index("material_code")
+    p = master.sku_profile.set_index("material_code")
+    succ = m[m["predecessor_material_code"].notna()]
+    assert len(succ) > 0
+    pred_codes = succ["predecessor_material_code"]
+    pred = m.loc[pred_codes]
+    assert (succ["category"].to_numpy() == pred["category"].to_numpy()).all()
+    assert (succ["units_per_box"].to_numpy() == pred["units_per_box"].to_numpy()).all()
+    same_product = (
+        product_type(succ["description"]).to_numpy() == product_type(pred["description"]).to_numpy()
+    )
+    assert same_product.all()
+    for column in ("pattern", "lines_per_week", "size_sigma", "median_order_qty", "season_kappa"):
+        assert (p.loc[succ.index, column].to_numpy() == p.loc[pred_codes, column].to_numpy()).all()
 
 
 def test_moq_is_a_positive_whole_number_of_boxes(master):

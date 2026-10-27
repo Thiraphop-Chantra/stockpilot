@@ -119,6 +119,10 @@ def customer_bases(cfg: SynthConfig, cal: Calendar, master: Master) -> CustomerB
         pick = size**BASE_SIZE_EXPONENT * TYPE_CATEGORY_AFFINITY[ctype, category[i]]
         chosen = rng.choice(n_cust, size=k, replace=False, p=pick / pick.sum())
         weights[i, chosen] = np.round(size[chosen] * rng.lognormal(0.0, 0.5, size=k), 9)
+    row = {code: i for i, code in enumerate(master.materials["material_code"])}
+    for i, pred in enumerate(master.materials["predecessor_material_code"]):
+        if pred is not None and not pd.isna(pred):
+            weights[i] = weights[row[pred]]  # a successor is bought by its predecessor's customers
 
     first = cal.dates[0]
     start = np.array(cprofile["active_from"].tolist(), dtype="datetime64[D]")

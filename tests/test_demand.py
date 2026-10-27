@@ -3,11 +3,12 @@
 from datetime import timedelta
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from stockpilot.synth.calendar import build_calendar
 from stockpilot.synth.config import SynthConfig
-from stockpilot.synth.demand import build_rates, generate_lines
+from stockpilot.synth.demand import build_rates, customer_bases, generate_lines
 from stockpilot.synth.master import build_master
 from stockpilot.synth.measure import measure_patterns, weekly_totals
 from stockpilot.synth.promotions import build_promotions
@@ -148,3 +149,17 @@ def test_late_launches_ramp_up_without_numeric_warnings():
     master = build_master(cfg, cal)
     rates = build_rates(cfg, cal, master, build_promotions(cfg, cal, master))
     assert np.isfinite(rates).all()
+
+
+def test_successors_inherit_their_predecessors_customer_base(small_cfg, small_cal, small_master):
+    bases = customer_bases(small_cfg, small_cal, small_master)
+    m = small_master.materials
+    row = {code: i for i, code in enumerate(m["material_code"])}
+    pairs = [
+        (row[code], row[pred])
+        for code, pred in zip(m["material_code"], m["predecessor_material_code"], strict=True)
+        if pred is not None and not pd.isna(pred)
+    ]
+    assert pairs
+    for successor, predecessor in pairs:
+        assert np.array_equal(bases.weights[successor], bases.weights[predecessor])

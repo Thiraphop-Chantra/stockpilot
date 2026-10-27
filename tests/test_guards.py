@@ -12,8 +12,11 @@ REPO = Path(__file__).resolve().parents[1]
 PACKAGE = REPO / "src" / "stockpilot"
 
 # Ground truth may only be touched by the generator, the path helpers and (later) scoring code.
-TRUTH_PATTERN = re.compile(r"truth_dir|TRUTH_DIR|[\"']truth[\"']|/truth/")
+TRUTH_PATTERN = re.compile(r"truth_dir|TRUTH_DIR|[/\"']truth\b|\btruth[/\"']")
 TRUTH_ALLOWED_PREFIXES = ("synth/", "scoring/", "paths.py")
+# The generator can rebuild the truth from a seed, so only the CLI and scoring may import it.
+SYNTH_IMPORT = re.compile(r"^\s*(?:from|import)\s+stockpilot\.synth\b", re.MULTILINE)
+SYNTH_IMPORT_ALLOWED_PREFIXES = ("synth/", "scoring/", "cli.py")
 
 # Thai script is allowed only in the synthetic-data word list.
 THAI_SCRIPT = re.compile("[\u0e00-\u0e7f]")
@@ -25,9 +28,12 @@ def truth_violations(package: Path) -> list[str]:
     violations = []
     for path in sorted(package.rglob("*.py")):
         rel = path.relative_to(package).as_posix()
-        if rel.startswith(TRUTH_ALLOWED_PREFIXES):
-            continue
-        if TRUTH_PATTERN.search(path.read_text(encoding="utf-8")):
+        text = path.read_text(encoding="utf-8")
+        reads_truth = not rel.startswith(TRUTH_ALLOWED_PREFIXES) and TRUTH_PATTERN.search(text)
+        imports_generator = not rel.startswith(
+            SYNTH_IMPORT_ALLOWED_PREFIXES
+        ) and SYNTH_IMPORT.search(text)
+        if reads_truth or imports_generator:
             violations.append(rel)
     return violations
 
@@ -64,12 +70,23 @@ def test_truth_is_only_referenced_by_generator_and_scoring():
     assert truth_violations(PACKAGE) == []
 
 
-def test_truth_guard_flags_a_reader_outside_the_allowlist(tmp_path):
+def test_truth_guard_flags_readers_outside_the_allowlist(tmp_path):
     package = tmp_path / "stockpilot"
     (package / "synth").mkdir(parents=True)
-    (package / "synth" / "export.py").write_text("SUBDIR = 'truth'\n", encoding="utf-8")
-    (package / "audit.py").write_text("from stockpilot.paths import truth_dir\n", encoding="utf-8")
-    assert truth_violations(package) == ["audit.py"]
+    files = {
+        "synth/export.py": "SUBDIR = 'truth'\nfrom stockpilot.synth import rng\n",
+        "cli.py": "from stockpilot.synth import generate\n",
+        "notes.py": '"""This module never reads the truth."""\n',
+        "audit.py": "from stockpilot.paths import truth_dir\n",
+        "forecast.py": 'labels = Path("data/truth") / "issues.parquet"\n',
+        "optimize.py": 'path = f"{root}/truth"\n',
+        "mcp.py": "from stockpilot.synth import generate\n",
+        "dashboard.py": "import stockpilot.synth.config as config\n",
+    }
+    for name, text in files.items():
+        (package / name).write_text(text, encoding="utf-8")
+    expected = ["audit.py", "dashboard.py", "forecast.py", "mcp.py", "optimize.py"]
+    assert truth_violations(package) == expected
 
 
 @pytest.mark.skipif(not (REPO / ".git").exists(), reason="needs a git checkout")

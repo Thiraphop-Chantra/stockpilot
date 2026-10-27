@@ -21,8 +21,9 @@ a fictional mid-sized Thai distributor. The work is split into 7 steps, one per 
 ## Hard constraints (every step, no exceptions)
 
 1. **Synthetic data only.** Never use or reference any real company's data, names or figures.
-   Names are composed at random from generic words or syllables. Do not add lists of real names,
-   not even as a blocklist. Everything that shows data (README, docs, dashboard, MCP answers) says
+   Customer names are composed at random from generic Thai words; brands and suppliers are
+   numbered labels ("Brand 017"), because invented words can collide with real brands. Do not add
+   lists of real names, not even as a blocklist. Everything that shows data (README, docs, dashboard, MCP answers) says
    the data is synthetic; every Parquet file carries the schema metadata `stockpilot.synthetic=true`.
 2. **Every result number is reproducible.** Numbers in README, docs and the dashboard come from a
    real run that the same seed reproduces. They live only inside generated blocks
@@ -40,7 +41,9 @@ a fictional mid-sized Thai distributor. The work is split into 7 steps, one per 
    uses the network at runtime; only `uv sync` / `uv lock` download packages.
 5. **Ground truth is for scoring only.** `data/truth/` may be read by `stockpilot.synth` and by
    scoring code (`stockpilot.scoring`, from Step 2) — never by audit, forecasting, optimisation,
-   MCP or dashboard code. `tests/test_guards.py` enforces this.
+   MCP or dashboard code. The generator's code, parameters and seed count as ground truth too:
+   only the CLI and scoring code may import `stockpilot.synth`, and no step may re-run it to
+   recover hidden values. `tests/test_guards.py` enforces this.
 6. **Deterministic.** Every random draw comes from `stockpilot.synth.rng.stream(seed, name)`;
    default seed 42. Same seed ⇒ byte-identical Parquet files across runs, Python 3.11–3.13 and
    CPU instruction sets (see *Determinism rules*).
@@ -81,8 +84,8 @@ changing dependencies run `uv lock` and commit `uv.lock`. After changing the gen
 ## Working rules
 
 - Keep working on your own whenever the next step does not need the owner.
-- Stop and ask only when genuinely blocked, or before: force-pushing, deleting anything that
-  cannot be regenerated, or changing anything outside this repository.
+- Stop and ask only when genuinely blocked, or before: force-pushing, deleting data, or changing
+  anything outside this repository. Regenerating `data/` with `make data` is not deleting data.
 - Follow the roadmap step you are on; if a later step needs an earlier decision revisited, record
   it in `TASKS.md` (Open decisions) instead of silently diverging.
 - Prefer small, test-first changes; every new behaviour gets a test that failed before the change.

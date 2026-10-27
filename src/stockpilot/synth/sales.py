@@ -1,9 +1,10 @@
 """Clean ERP sales records: what the company invoiced, before any data-quality problem.
 
 Every shipped order line becomes one invoice item. Lines of one customer on one day form one
-billing document (numbered in date order, items 10, 20, ...). A line shipped in full keeps its
-order unit; a line cut short by a stockout ships what was left, invoiced in pieces. Net values
-use the year's price list, the customer channel's discount and any promotion discount.
+billing document, numbered in date order and, within a day, in random entry order (items 10, 20,
+...). A line shipped in full keeps its order unit; a line cut short by a stockout ships what was
+left, invoiced in pieces. Net values use the year's price list, the customer channel's discount
+and any promotion discount.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from stockpilot.synth.geo import WAREHOUSES
 from stockpilot.synth.inventory import Inventory
 from stockpilot.synth.master import CUSTOMER_TYPES, Master
 from stockpilot.synth.promotions import Promotions
+from stockpilot.synth.rng import stream
 
 # Standard discount off list price by customer channel (CUSTOMER_TYPES order).
 CHANNEL_DISCOUNT = (0.08, 0.12, 0.0, 0.03, 0.05)
@@ -62,9 +64,12 @@ def build_sales_clean(
             "net_value_thb": net_value,
         }
     )
-    frame = frame.sort_values(
-        ["posting_date", "customer_id", "material_code"], kind="stable"
-    ).reset_index(drop=True)
+    # Documents of a day are numbered in (random) entry order, not by customer number.
+    rng = stream(cfg.seed, "document-order")
+    visit = day.astype(np.int64) * len(customers) + customer
+    visits, which = np.unique(visit, return_inverse=True)
+    entry = rng.permutation(visits.size)[which]
+    frame = frame.iloc[np.lexsort((sku, entry, day))].reset_index(drop=True)
     new_doc = (frame["posting_date"] != frame["posting_date"].shift()) | (
         frame["customer_id"] != frame["customer_id"].shift()
     )

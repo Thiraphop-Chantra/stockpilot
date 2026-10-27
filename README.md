@@ -45,7 +45,7 @@ Details and definitions of done: [docs/ROADMAP.md](docs/ROADMAP.md). Live checkl
 ## The synthetic dataset
 
 <!-- generated:readme-summary:start -->
-The default synthetic dataset (seed 42) covers 2021-01-01 to 2025-12-31: 2,000 SKUs, 600 customers, 60 suppliers and 3 warehouses, with 4,022,207 raw sales rows and 341,666 purchase-order items. Details and limitations: [docs/DATA.md](docs/DATA.md).
+The default synthetic dataset (seed 42) covers 2021-01-01 to 2025-12-31: 2,000 SKUs, 600 customers, 60 suppliers and 3 warehouses, with 3,904,156 raw sales rows and 352,336 purchase-order items. Details and limitations: [docs/DATA.md](docs/DATA.md).
 <!-- generated:readme-summary:end -->
 
 The data mimics ERP exports of a Thai distributor — SAP-style material codes, box/piece units,

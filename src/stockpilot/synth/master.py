@@ -59,6 +59,7 @@ NEW_SKU_SHARE, DISCONTINUED_SHARE, SUCCESSOR_SHARE = 0.12, 0.08, 0.5
 NEW_SKU_MIN_HISTORY_DAYS = 182  # launches leave at least 26 weeks of history
 FIRST_MASTER_DATE = date(2010, 1, 1)
 FIRST_CUSTOMER_DATE = date(2008, 1, 1)
+FIRST_CUSTOMER_NUMBER, CUSTOMER_NUMBERS = 100_000, 900_000  # account numbers 100000-999999
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,7 @@ def _suppliers(cfg: SynthConfig, cal: Calendar):
         categories[i].add(int(rng.choice(n_cat, p=_category_weights(cfg))))
 
     rows, truth = [], []
-    bases = names.pick_stems(rng, n)
+    labels = 1 + rng.permutation(n)  # numbered, so a name can never be a real company's
     ids = 300001 + rng.permutation(n)
     for i in range(n):
         primary = CATEGORIES[min(categories[i])]
@@ -141,7 +142,7 @@ def _suppliers(cfg: SynthConfig, cal: Calendar):
         rows.append(
             (
                 supplier_id,
-                names.supplier_name(rng, bases[i], country),
+                names.supplier_name(rng, f"Supplier {labels[i]:03d}", country),
                 country,
                 lead_time,
                 cycle,
@@ -215,15 +216,15 @@ def _materials(cfg: SynthConfig, suppliers: pd.DataFrame, supplier_categories: l
         numbers = cat.material_prefix * 1_000_000 + rng.choice(1_000_000, idx.size, replace=False)
         codes[idx] = [f"{int(x):018d}" for x in numbers]
 
-    brands = names.pick_stems(rng, min(len(names.BRAND_STEMS), max(8, n // 12)))
+    brands = [f"Brand {k:03d}" for k in range(1, max(8, n // 12) + 1)]  # never a real brand
     suppliers_of = {c: [i for i, cats in enumerate(supplier_categories) if c in cats] for c in
                     range(len(CATEGORIES))}  # fmt: skip
     supplier_ids = suppliers["supplier_id"].to_numpy()
 
     lifecycle, launch, discontinued, ramp, decline = _lifecycle(cfg, pattern, rng)
-    predecessor = _successors(cfg, category, lifecycle, launch, discontinued, codes, rng)
+    predecessor = _successors(cfg, category, pattern, lifecycle, launch, discontinued, rng)
 
-    rows, profile = [], []
+    rows, profile, bands = [], [], []
     for i in range(n):
         cat = CATEGORIES[category[i]]
         p = str(pattern[i])
@@ -246,86 +247,75 @@ def _materials(cfg: SynthConfig, suppliers: pd.DataFrame, supplier_categories: l
         base_per_line = median_qty * math.exp(sigma**2 / 2) * (units if sales_unit == "BOX" else 1)
         moq_boxes = max(1, math.ceil(float(rng.uniform(0.3, 1.5)) * lines * base_per_line / units))
         promo = fast and cat.promotable and bool(rng.random() < PROMO_ELIGIBLE_SHARE)
+        brand = brands[rng.integers(len(brands))]
+        bands.append((price_lo, price_hi))
         rows.append(
-            (
-                codes[i],
-                f"{brands[rng.integers(len(brands))]} {product}",
-                cat.code,
-                sales_unit,
-                units,
-                price,
-                cost,
-                moq_boxes * units,
-                supplier_ids[rng.choice(suppliers_of[category[i]])],
-                launch[i],
-                discontinued[i],
-                predecessor[i],
-            )
+            {
+                "material_code": codes[i],
+                "description": f"{brand} {product}",
+                "category": cat.code,
+                "brand": brand,
+                "sales_unit": sales_unit,
+                "units_per_box": units,
+                "list_price_thb": price,
+                "standard_cost_thb": cost,
+                "moq": moq_boxes * units,
+                "supplier_id": supplier_ids[rng.choice(suppliers_of[category[i]])],
+                "launch_date": launch[i],
+                "discontinued_date": discontinued[i],
+                "predecessor_material_code": codes[predecessor[i]] if predecessor[i] >= 0 else None,
+            }
         )
         profile.append(
-            (
-                codes[i],
-                p,
-                cat.code,
-                lifecycle[i],
-                round(float(lines), 6),
-                round(sigma, 6),
-                round(median_qty, 6),
-                round(float(rng.uniform(*ERRATIC_GAMMA_SHAPE)), 6) if p == "erratic" else np.nan,
-                round(float(rng.uniform(*SEASON_KAPPA[p])), 6),
-                round(float(np.clip(rng.normal(0.02, 0.06), -0.15, 0.20)), 6),
-                promo,
-                round(float(rng.uniform(1.5, 3.5)), 6) if promo else np.nan,
-                round(float(rng.uniform(0.01, 0.04)), 6),
-                ramp[i],
-                decline[i],
-            )
+            {
+                "material_code": codes[i],
+                "pattern": p,
+                "category": cat.code,
+                "lifecycle": lifecycle[i],
+                "lines_per_week": round(float(lines), 6),
+                "size_sigma": round(sigma, 6),
+                "median_order_qty": round(median_qty, 6),
+                "gamma_shape": (
+                    round(float(rng.uniform(*ERRATIC_GAMMA_SHAPE)), 6) if p == "erratic" else np.nan
+                ),
+                "season_kappa": round(float(rng.uniform(*SEASON_KAPPA[p])), 6),
+                "trend_per_year": round(float(np.clip(rng.normal(0.02, 0.06), -0.15, 0.20)), 6),
+                "promo_eligible": promo,
+                "promo_elasticity": round(float(rng.uniform(1.5, 3.5)), 6) if promo else np.nan,
+                "price_growth_per_year": round(float(rng.uniform(0.01, 0.04)), 6),
+                "ramp_weeks": ramp[i],
+                "decline_weeks": decline[i],
+            }
         )
 
-    materials = pd.DataFrame(
-        rows,
-        columns=[
-            "material_code",
-            "description",
-            "category",
-            "sales_unit",
-            "units_per_box",
-            "list_price_thb",
-            "standard_cost_thb",
-            "moq",
-            "supplier_id",
-            "launch_date",
-            "discontinued_date",
-            "predecessor_material_code",
-        ],
-    )
-    materials.insert(3, "brand", materials["description"].str.split(" ").str[0])
+    # A successor is the next version of its predecessor's product: same product line, pack,
+    # supplier and demand parameters (its customer base is inherited in demand.py).
+    for j in np.flatnonzero(predecessor >= 0):
+        i = predecessor[j]
+        old, new = rows[i], rows[j]
+        for key in ("brand", "sales_unit", "units_per_box", "moq", "supplier_id"):
+            new[key] = old[key]
+        new["description"] = f"{old['description']} V2"
+        price = min(bands[i][1], old["list_price_thb"] * float(rng.uniform(1.0, 1.1)))
+        new["list_price_thb"] = round(round(price * 4) / 4, 2)
+        new["standard_cost_thb"] = round(new["list_price_thb"] * float(rng.uniform(0.62, 0.85)), 2)
+        for key in (
+            "lines_per_week",
+            "size_sigma",
+            "median_order_qty",
+            "gamma_shape",
+            "season_kappa",
+        ):
+            profile[j][key] = profile[i][key]
+
+    materials = pd.DataFrame(rows)
     materials.insert(4, "base_unit", "PC")
     materials.insert(
         materials.columns.get_loc("launch_date") + 1,
         "status",
         np.where(materials["discontinued_date"].isna(), "ACTIVE", "DISCONTINUED"),
     )
-    sku_profile = pd.DataFrame(
-        profile,
-        columns=[
-            "material_code",
-            "pattern",
-            "category",
-            "lifecycle",
-            "lines_per_week",
-            "size_sigma",
-            "median_order_qty",
-            "gamma_shape",
-            "season_kappa",
-            "trend_per_year",
-            "promo_eligible",
-            "promo_elasticity",
-            "price_growth_per_year",
-            "ramp_weeks",
-            "decline_weeks",
-        ],
-    )
+    sku_profile = pd.DataFrame(profile)
     order = np.argsort(codes.astype(str), kind="stable")
     return (
         materials.iloc[order].reset_index(drop=True),
@@ -362,24 +352,29 @@ def _lifecycle(cfg: SynthConfig, pattern: np.ndarray, rng):
     return lifecycle, launch, discontinued, ramp, decline
 
 
-def _successors(cfg, category, lifecycle, launch, discontinued, codes, rng):
-    """Half of the discontinued SKUs are replaced by a new SKU launched around the same time."""
-    predecessor = np.full(len(codes), None, dtype=object)
+def _successors(cfg, category, pattern, lifecycle, launch, discontinued, rng) -> np.ndarray:
+    """Pair discontinued SKUs with a new SKU of the same category and demand pattern.
+
+    With probability SUCCESSOR_SHARE a discontinued SKU gets a successor, provided a free launch
+    of the same category and pattern exists and its launch can move to just before the
+    discontinuation. Returns the predecessor's row for every SKU (-1 if none).
+    """
+    predecessor = np.full(len(category), -1, dtype=np.int64)
     latest_launch = cfg.history_end - timedelta(days=NEW_SKU_MIN_HISTORY_DAYS)
     earliest_launch = cfg.start + timedelta(days=60)
-    free_new = [i for i in range(len(codes)) if lifecycle[i] == "new"]
+    free_new = [i for i in range(len(category)) if lifecycle[i] == "new"]
     retired = np.flatnonzero(lifecycle == "discontinued")
     for i in retired[rng.permutation(retired.size)]:
-        if not free_new or rng.random() >= SUCCESSOR_SHARE:
+        if rng.random() >= SUCCESSOR_SHARE:
             continue
         new_launch = discontinued[i] - timedelta(days=int(rng.integers(0, 31)))
-        if not earliest_launch <= new_launch <= latest_launch:
+        match = [j for j in free_new if category[j] == category[i] and pattern[j] == pattern[i]]
+        if not match or not earliest_launch <= new_launch <= latest_launch:
             continue
-        same = [j for j in free_new if category[j] == category[i]]
-        j = (same or free_new)[0]
+        j = match[0]
         free_new.remove(j)
         launch[j] = new_launch
-        predecessor[j] = codes[i]
+        predecessor[j] = i
     return predecessor
 
 
@@ -437,7 +432,13 @@ def _customers(cfg: SynthConfig):
 
     block_before = cfg.extraction_date - timedelta(days=90)
     blocked = np.array([d is not None and d <= block_before for d in active_to])
-    ids = np.array([f"{100001 + k:010d}" for k in rng.permutation(n)])
+    # Sparse random account numbers: neither creation order nor duplicates can be read from them.
+    ids = np.array(
+        [
+            f"{FIRST_CUSTOMER_NUMBER + int(k):010d}"
+            for k in rng.choice(CUSTOMER_NUMBERS, n, replace=False)
+        ]
+    )
     customers = pd.DataFrame(
         {
             "customer_id": ids,

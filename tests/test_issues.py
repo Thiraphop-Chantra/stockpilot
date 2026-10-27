@@ -172,3 +172,20 @@ def test_entry_errors_are_inherited_by_duplicate_copies(small_injected, kind):
     keys = raw.loc[lab["row_id"], ["billing_doc", "item"]].apply(tuple, axis=1)
     copies = raw.reset_index().merge(pd.DataFrame(list(set(keys)), columns=["billing_doc", "item"]))
     assert set(copies["row_id"]) == set(lab["row_id"])
+
+
+def test_duplicate_accounts_do_not_stand_out_by_number(small_injected):
+    # Using raw data only: a duplicate created later must not simply get the next free number.
+    raw = small_injected.raw_customers
+    dups = set(labels(small_injected, "duplicate_customer")["record_key"])
+    numbers = raw["customer_id"].astype(int)
+    highest = set(raw.loc[numbers.nlargest(len(dups)).index, "customer_id"])
+    assert len(dups & highest) / len(dups) <= 0.5
+
+
+def test_billing_documents_are_not_numbered_in_customer_order(small_injected):
+    # Document order within a day must not reveal which account a moved document belonged to.
+    docs = small_injected.raw_sales.drop_duplicates("billing_doc").sort_values("billing_doc")
+    same_day = docs["posting_date"].eq(docs["posting_date"].shift())
+    ascending = docs["customer_id"].astype(int).diff() > 0
+    assert ascending[same_day].mean() < 0.75

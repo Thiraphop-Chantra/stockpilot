@@ -2,9 +2,10 @@
 
 > **Everything in this dataset is synthetic.** It is produced by `stockpilot.synth` for a
 > fictional company. No real company's data, names or figures are used or referenced. Customer
-> names are composed at random from generic Thai words, brand and supplier names from invented
-> stems; any resemblance to a real business is coincidental. Every Parquet file carries the
-> schema metadata `stockpilot.synthetic=true`, and `data/manifest.json` says so too.
+> names are composed at random from generic Thai words (any resemblance to a real business is
+> coincidental); brands and suppliers are numbered labels such as "Brand 017" and
+> "Supplier 031 Co., Ltd." so they can never coincide with a real company. Every Parquet file
+> carries the schema metadata `stockpilot.synthetic=true`, and `data/manifest.json` says so too.
 
 `make data` writes the dataset to `data/` (gitignored, regenerated within a few minutes):
 
@@ -39,8 +40,9 @@ back-to-school peak for stationery, a December peak for gift baskets) and produc
 plausible price bands and pack sizes.
 
 Customers are modern-trade chains (MT), wholesalers, retailers, hotels/restaurants (HORECA) and
-institutions in 32 provinces, placed near the provincial capital and served by the plant of their
-region. Key accounts (MT and wholesale, a fifth of the customers) carry most of the volume.
+institutions, drawn from a configured list of 32 provinces, placed near the provincial capital and
+served by the plant of their region. Account numbers are sparse random numbers, as after a system
+migration, so neither creation order nor duplicate accounts can be read from them. Key accounts (MT and wholesale, a fifth of the customers) carry most of the volume.
 
 ## How the data is generated
 
@@ -96,8 +98,12 @@ the true uplift and dip are truth.
 ### Lifecycle and structural breaks
 
 A configured 12% of SKUs (fast movers) launch during the history with a ramp-up; 8% are
-discontinued after a decline; half of the discontinued SKUs have a successor that names its
-predecessor in the master data. About 10% of customers are acquired and 6% stop buying during the
+discontinued after a decline. With a configured probability of one half, a discontinued SKU is
+replaced by a successor of the same category and demand pattern — whenever such a launch can be
+placed just before the discontinuation — so only some discontinued fast movers get one (the
+realised count is in the statistics below). A successor is the next version of the same product
+line (`… V2`, naming its predecessor in the master data): same pack, supplier, customer base and
+demand parameters, but its demand is drawn afresh rather than copied from the predecessor. About 10% of customers are acquired and 6% stop buying during the
 history, and one key account is lost for good — a structural break for every SKU it bought.
 
 ### Replenishment, stockouts and lead times
@@ -121,7 +127,7 @@ receipt) and month-end stock are observable.
 ### Invoices and prices
 
 Shipped lines become invoice items; one billing document per customer and day, numbered in date
-order (`90…`), items 10, 20, 30. A line cut short by a stockout ships what is left and is
+order and, within a day, in random entry order (`90…`), items 10, 20, 30. A line cut short by a stockout ships what is left and is
 invoiced in pieces. Net values use that year's price list, the channel discount and any promotion
 discount.
 
@@ -138,9 +144,10 @@ discount.
 | `missing_list_price` | `raw/materials` | Price never maintained in the master | per material |
 | `duplicate_customer` | `raw/customers` (and their sales) | Same customer entered again in English instead of Thai (or the reverse) or with another romanisation; part of its later orders are booked on the new account | per duplicate account, pointing at the original |
 
-Entry errors (`extra_zero`, `unit_mismatch`, `missing_net_value`, `future_date`) hit at most one
-field of an ERP record and are copied into every exported copy of that record; export problems
-(overlaps, re-runs, stripped zeros) stack on top. Configured rates are in
+Each ERP record carries at most one entry error (`extra_zero`, `unit_mismatch`,
+`missing_net_value` or `future_date`; an extra-zero typo whose net value was recomputed changes
+quantity and net value together), and the error is copied into every exported copy of that
+record; export problems (overlaps, re-runs, stripped zeros) stack on top. Configured rates are in
 `stockpilot.synth.config.IssueRates`; tests prove that the number of corrupted records follows
 those rates, that independent re-detection finds exactly the labelled rows, and that no raw cell
 differs from the clean truth without a label.
@@ -177,7 +184,9 @@ only `stockpilot.synth` and `stockpilot.scoring` may). Intended uses:
   month-end stock of 2025-12-31 and the open purchase orders, whose actual arrival dates are in
   `open_po_receipts`.
 
-Practical notes: dates are Parquet `date32`; pandas reads them as `datetime.date` objects. The
+Practical notes: `demand_daily` is sparse — it has a row for every SKU, plant and day with
+demand or (in the history) a stockout; a missing row means zero demand. Dates are Parquet
+`date32`; pandas reads them as `datetime.date` objects. The
 Buddhist-era typos (years 2564–2568) do not fit pandas' default nanosecond timestamps — convert
 with an explicit unit (for example `pd.to_datetime(..., unit="s")` on epoch seconds) or keep
 `datetime.date`. Material codes are strings; never cast them to numbers.
@@ -197,40 +206,40 @@ _Rendered by `make docs-stats` from `data/manifest.json` (preset `default`, seed
 | Warehouses (plants) | 3 |
 | History | 2021-01-01 to 2025-12-31 (1,826 days, 1,442 working days) |
 | Hidden horizon (truth only) | to 2026-06-30 |
-| Raw sales rows / clean invoice items | 4,022,207 / 3,937,531 |
-| Purchase-order items (open at extraction) | 341,666 (2,594) |
-| Promotions (history / planned in horizon) | 4,230 / 667 |
-| Launches / discontinuations / launches replacing a predecessor | 240 / 160 / 67 |
+| Raw sales rows / clean invoice items | 3,904,156 / 3,820,472 |
+| Purchase-order items (open at extraction) | 352,336 (2,576) |
+| Promotions (history / planned in horizon) | 4,414 / 683 |
+| Launches / discontinuations / launches replacing a predecessor | 240 / 160 / 25 |
 
 **Demand patterns** (share of SKUs; weekly ADI/CV² over each SKU's active window)
 
 | Pattern | Configured target | Measured on true demand | Measured on observed sales |
 |---|---:|---:|---:|
-| smooth | 35.0% | 35.0% | 35.0% |
-| erratic | 15.0% | 15.0% | 15.0% |
-| intermittent | 30.0% | 30.4% | 37.2% |
-| lumpy | 20.0% | 19.6% | 12.8% |
+| smooth | 35.0% | 35.0% | 35.2% |
+| erratic | 15.0% | 15.0% | 14.9% |
+| intermittent | 30.0% | 30.0% | 36.4% |
+| lumpy | 20.0% | 19.9% | 13.5% |
 
-Assigned and measured pattern agree for 99.6% of SKUs on true demand; 0 SKUs have too little history to classify.
+Assigned and measured pattern agree for 99.9% of SKUs on true demand; 3 SKUs have too little history to classify.
 
 **Service of the company's current replenishment policy** (history)
 
 | Measure | Value |
 |---|---:|
-| Unit fill rate | 96.4% |
-| Lost units | 13,620,938 |
+| Unit fill rate | 96.5% |
+| Lost units | 13,766,951 |
 | Demand days with a stockout | 3.8% |
 
 **Injected data-quality problems**
 
 | Problem | Labels (rows or records) | Corrupted ERP records |
 |---|---:|---:|
-| `truncated_material_code` | 215,069 | - |
-| `duplicate_row` | 84,676 | - |
-| `extra_zero` | 4,022 | 3,938 |
-| `unit_mismatch` | 7,859 | 7,692 |
-| `missing_net_value` | 12,062 | 11,813 |
-| `future_date` | 2,002 | 1,969 |
+| `truncated_material_code` | 194,072 | - |
+| `duplicate_row` | 83,684 | - |
+| `extra_zero` | 3,908 | 3,820 |
+| `unit_mismatch` | 7,622 | 7,466 |
+| `missing_net_value` | 11,687 | 11,461 |
+| `future_date` | 1,953 | 1,910 |
 | `missing_list_price` | 40 | - |
 | `duplicate_customer` | 24 | - |
 
@@ -245,9 +254,9 @@ Export files with stripped leading zeros: 3; re-run export files: 1.
 | `customer_loss` | 1 |
 | `product_discontinuation` | 160 |
 | `product_launch` | 240 |
-| `supply_disruption` | 39 |
+| `supply_disruption` | 33 |
 
-The lost key account stops buying on 2024-07-17; it placed 3.3% of company demand in the year before.
+The lost key account stops buying on 2024-07-17; it placed 3.5% of company demand in the year before.
 <!-- generated:data-stats:end -->
 
 ## Data dictionary
@@ -557,8 +566,9 @@ Actual receipt dates of purchase orders open at extraction.
   backorders (unmet demand is lost), full deliveries from suppliers.
 - Customers are served only by their regional plant; the stockout of one plant never shifts
   demand to another.
-- Names come from small word lists, so unrelated customers can share words; coordinates are
-  approximate city centres with small jitter.
+- Customer names come from a small word list, so unrelated customers can share words; brands and
+  suppliers are numbered labels rather than names; coordinates are approximate city centres with
+  small jitter.
 - Data-quality problems are limited to the types above; purchase orders, stock snapshots and
   promotions are clean.
 

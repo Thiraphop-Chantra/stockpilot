@@ -26,7 +26,7 @@ import pandas as pd
 from stockpilot.synth import names
 from stockpilot.synth.calendar import Calendar
 from stockpilot.synth.config import IssueRates, SynthConfig
-from stockpilot.synth.master import Master
+from stockpilot.synth.master import CUSTOMER_NUMBERS, FIRST_CUSTOMER_NUMBER, Master
 from stockpilot.synth.rng import stream
 
 ENTRY_ERROR_TYPES = ("extra_zero", "unit_mismatch", "missing_net_value", "future_date")
@@ -141,17 +141,17 @@ def _duplicate_customers(cfg: SynthConfig, cal: Calendar, master: Master, rates:
     )
     k = min(pool.size, _count(rates.duplicate_customer, len(customers)))
     chosen = np.sort(rng.choice(pool, size=k, replace=False))
-    next_id = int(customers["customer_id"].astype(int).max()) + 1
+    taken = set(customers["customer_id"].astype(int))
     days = (cfg.history_end - cfg.start).days
     rows, labels, duplicates = [], [], []
-    for j, i in enumerate(chosen):
+    for i in chosen:
         original = customers.iloc[i]
         words = tuple(int(w) for w in profile.at[i, "name_words"].split(","))
         parts = names.NameParts(original["customer_type"], words, int(profile.at[i, "name_form"]))
         name, kind = names.variant_name(rng, parts, profile.at[i, "name_lang"])
         earliest = max(30, (original["created_date"] - cfg.start).days + 30)
         created = cfg.start + timedelta(days=int(rng.integers(earliest, days - 120 + 1)))
-        dup_id = f"{next_id + j:010d}"
+        dup_id = f"{_unused_number(rng, taken):010d}"
         row = original.copy()
         row["customer_id"], row["customer_name"], row["created_date"] = dup_id, name, created
         row["latitude"] = round(float(original["latitude"] + rng.normal(0.0, 0.002)), 6)
@@ -175,6 +175,15 @@ def _duplicate_customers(cfg: SynthConfig, cal: Calendar, master: Master, rates:
     raw = pd.concat([customers, pd.DataFrame(rows)], ignore_index=True)
     raw = raw.sort_values("customer_id", kind="stable").reset_index(drop=True)
     return raw, duplicates, pd.DataFrame(labels).reindex(columns=ISSUE_COLUMNS)
+
+
+def _unused_number(rng, taken: set[int]) -> int:
+    """A random account number from the same sparse range as the originals (no ordering tell)."""
+    while True:
+        number = FIRST_CUSTOMER_NUMBER + int(rng.integers(CUSTOMER_NUMBERS))
+        if number not in taken:
+            taken.add(number)
+            return number
 
 
 def _book_on_duplicates(erp: pd.DataFrame, duplicates, rng) -> np.ndarray:
