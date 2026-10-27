@@ -6,19 +6,30 @@ Legend: `[x]` done · `[ ]` open · `[~]` partially done (explain in the item).
 
 ## Step 1 — Foundation + synthetic data
 
-- [ ] Toolchain: pyproject (src layout), uv.lock, ruff, pytest, Makefile, `.python-version`
-- [ ] CI: lint + tests (Python 3.11 and 3.13) + reproducibility job
-- [ ] Governance: CLAUDE.md, docs/ROADMAP.md, TASKS.md, README.md, CHANGELOG.md, LICENSE (MIT)
-- [ ] `stockpilot.patterns`: ADI/CV² demand-pattern classifier
-- [ ] `stockpilot.synth`: config presets, seeded streams, Thai business calendar
-- [ ] Master data: materials, suppliers, customers, warehouses
-- [ ] Demand: patterns, trend, seasonality, holidays, promotions, lifecycle, structural break
-- [ ] Inventory simulation: purchase orders, variable lead times, stockouts, month-end stock
-- [ ] Data quality issues injected with complete truth labels
-- [ ] Parquet writer, manifest, validation, `stockpilot synth` / `stockpilot validate` CLI
-- [ ] Tests: determinism (incl. CPU paths), pattern mix vs target, issue counts vs truth
-- [ ] docs/DATA.md with generated statistics and data dictionary
-- [ ] `make data`, `make lint`, `make test` pass; PR into `main`
+- [x] Toolchain: pyproject (src layout), uv.lock, ruff, pytest, Makefile, `.python-version`
+- [x] CI: lint + tests (Python 3.11 and 3.13) + reproducibility job (`make data`, `make docs-check`)
+- [x] Governance: CLAUDE.md, docs/ROADMAP.md, TASKS.md, README.md, CHANGELOG.md, LICENSE (MIT)
+- [x] `stockpilot.patterns`: ADI/CV² demand-pattern classifier
+- [x] `stockpilot.synth`: config presets, seeded streams, Thai business calendar
+- [x] Master data: materials, suppliers, customers, warehouses
+- [x] Demand: patterns, trend, seasonality, holidays, promotions, lifecycle, structural break
+- [x] Inventory simulation: purchase orders, variable lead times, stockouts, month-end stock
+- [x] Data quality issues injected with complete truth labels
+- [x] Parquet writer, manifest, validation, `stockpilot synth` / `stockpilot validate` CLI
+- [x] Tests: determinism (incl. CPU paths), pattern mix vs target, issue counts vs truth
+- [x] docs/DATA.md with generated statistics and data dictionary
+- [x] `make data`, `make lint`, `make test` pass; PR into `main`
+
+Follow-ups found in the final review (not blocking; pick up in Step 7 or when touching the code):
+
+- [ ] Determinism test: add an AVX2-only + `OPENBLAS_CORETYPE=Haswell` variant and committed
+      tiny-preset hashes that both Python CI jobs check (today CI compares only the rounded
+      statistics across machines).
+- [ ] Issue tests: assert that a row carrying both `truncated_material_code` and `duplicate_row`
+      exists; check the extra-zero `net_value=kept/scaled` detail.
+- [ ] Inventory test: bound the length of stockout runs per active series.
+- [ ] CLI/Makefile polish: friendly errors for `--skus 0`, `--seed -1` and `docs-stats` without a
+      manifest; `make help` prints `$(DATA_DIR)` literally; `make ci` omits the reproducibility job.
 
 ## Step 2 — Data quality audit
 
@@ -66,3 +77,4 @@ Legend: `[x]` done · `[ ]` open · `[~]` partially done (explain in the item).
 
 | Session | Date | Step | Summary | PR |
 |---|---|---|---|---|
+| 1 | 2026-10-27 | 1 | Toolchain, CI, governance docs, ADI/CV² classifier, synthetic data generator with labelled issues and truth, DATA.md; final review fixes (duplicate-account leak, numbered brand labels, truth guard, successors) | [#1](https://github.com/Thiraphop-Chantra/stockpilot/pull/1) |
